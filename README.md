@@ -2,6 +2,16 @@
 
 A small ERP/CRM system for a wholesale/distribution company, built for the Full Stack Developer case study. It covers customers, products, stock, purchase orders, sales challans, and invoices, used by Admin, Sales, Warehouse, and Accounts roles.
 
+## Live deployment
+
+- **Frontend:** https://mini-erp-crm-beige-six.vercel.app
+- **Backend API:** https://mini-erp-crm-23b3.onrender.com
+- **Database:** Supabase Postgres
+
+Test credentials: see [Test login credentials](#test-login-credentials) below.
+
+Note: the backend is on Render's free tier, which spins down after inactivity - the first request after idle can take 30-60s to wake up.
+
 ## Tech stack
 
 - **Backend:** Node.js, TypeScript, Express.js, PostgreSQL (via Prisma ORM), JWT auth, Zod validation, pdfkit for invoice PDFs
@@ -154,17 +164,17 @@ Full request/response examples: import `postman_collection.json` into Postman. R
 
 ## Deploying for free (no AWS spend required)
 
-The assignment treats AWS as a bonus and says not to spend money, so the recommended path is:
+The assignment treats AWS as a bonus and says not to spend money, so the app is deployed as follows (see [Live deployment](#live-deployment) above for the actual URLs):
 
-1. **Database - [Neon](https://neon.tech) or [Supabase](https://supabase.com):** create a free Postgres project, copy the connection string into `DATABASE_URL`.
+1. **Database - [Supabase](https://supabase.com):** free Postgres project. Supabase's pooled connection (port 6543, `?pgbouncer=true`) is used as `DATABASE_URL`; its direct connection (port 5432) is used as `DIRECT_URL`, since Prisma migrations need a non-pooled connection - both are declared in `backend/prisma/schema.prisma`.
 2. **Backend - [Render](https://render.com):**
-   - New Web Service -> point at `backend/` -> build command `npm install && npx prisma generate && npm run build`, start command `npx prisma migrate deploy && npm start`.
-   - Add the environment variables listed above.
-   - After first deploy, run `npm run seed` once via Render's shell (or a one-off job) to create test users.
-3. **Frontend - [Vercel](https://vercel.com) or [Netlify](https://netlify.com):**
-   - Point at `frontend/`, build command `npm run build`, output directory `dist`.
-   - Set `VITE_API_URL` to the Render backend URL before building (Vite env vars are baked in at build time).
-   - Update the backend's `CORS_ORIGIN` to the deployed frontend URL.
+   - Web Service -> root directory `backend` -> build command `npm install && npx prisma generate && npm run build`, start command `npx prisma migrate deploy && npm start`.
+   - Environment variables: `DATABASE_URL`, `DIRECT_URL`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `CORS_ORIGIN` (set to the exact frontend URL, no trailing slash or path).
+   - Render's free tier has no shell access, so `npm run seed` was run once from a local machine with `DATABASE_URL`/`DIRECT_URL` temporarily pointed at Supabase, instead of via a Render shell.
+3. **Frontend - [Vercel](https://vercel.com):**
+   - Root directory `frontend`, build command `npm run build`, output directory `dist` (Vite defaults).
+   - `VITE_API_URL` set to the Render backend URL before building (Vite env vars are baked in at build time).
+   - `frontend/vercel.json` rewrites all paths to `index.html` - without it, direct navigation/refresh on any client-side route (e.g. `/login`) 404s, since Vercel otherwise looks for a matching static file.
 
 ### AWS (bonus, optional)
 
@@ -189,16 +199,15 @@ Not implemented: GitHub Actions deployment, S3 product image upload (see Known l
 - "Product snapshot data" on challans is interpreted as name, SKU, and unit price at confirmation time, alongside the live `productId` for traceability.
 - Direct product edits (`PUT /products/:id`) don't touch `stock` after creation - all stock changes go through the movement-logged endpoints (`stock-movements`, challan confirm/cancel, PO receive) so every quantity change is auditable.
 - Challan/PO/invoice numbers are generated as `CH-YYYYMMDD-####` / `PO-YYYYMMDD-####` / `INV-YYYYMMDD-####`, resetting the sequence each day.
-- Role permissions are a reasonable interpretation of the brief: Admin can do everything; Sales owns customers/challans; Warehouse owns products/stock/POs and can confirm challans (since warehouse staff physically pick/pack); Accounts can view everything and generate invoices. All authenticated roles can read customers/products/challans.
-- Since deployment wasn't required to be live, environment variable names and deploy steps are documented precisely so the reviewer (or the candidate) can stand it up on Render/Vercel/Neon in a few minutes.
+- Role permissions are a reasonable interpretation of the brief: Admin can do everything; Sales owns customers/challans, including confirming their own; Warehouse owns products/stock/POs and can also confirm challans (since warehouse staff physically pick/pack); Accounts can view everything and generate invoices. All authenticated roles can read customers/products/challans.
+- Environment variable names and deploy steps are documented precisely so the reviewer (or the candidate) can stand the app up on Render/Vercel/Supabase in a few minutes.
 
 ## Known limitations / incomplete parts
 
-- The build was verified in a sandboxed dev environment without outbound access to Prisma's binary CDN, so `prisma generate`/`migrate` couldn't be executed there. The frontend was fully installed, type-checked (`tsc -b`), and production-built successfully. The backend was verified by installing dependencies and reviewing every service module by hand (the transactional stock-deduction logic in particular); it uses a completely standard Prisma + Postgres setup and will generate/migrate normally on any machine with normal internet access (confirmed this is the only blocker - not a code issue).
-- No automated test suite (unit/integration tests) - given the 48-hour scope, manual verification via the Postman collection was prioritized instead.
+- No automated test suite (unit/integration tests) - given the 48-hour scope, manual verification via the Postman collection and the live deployment was prioritized instead.
 - No GitHub Actions CI/CD pipeline.
 - No S3 product image upload.
 - Customer/product "delete" isn't implemented, only create/edit - the brief only asked for add/edit/search/view.
 - The customer/product/challan search dropdowns in the frontend load up to 100 records rather than a true type-ahead search against the API; fine for a demo dataset, would need a debounced async-search combobox for large catalogs.
 - No refresh-token flow - JWTs simply expire after `JWT_EXPIRES_IN` and the user is redirected to log in again.
-- Not deployed live per the earlier deployment question; the app has been fully built and is ready to deploy following the steps above.
+- The Render free-tier backend spins down after inactivity; the first request after idle takes 30-60s to respond.
